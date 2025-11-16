@@ -96,18 +96,22 @@ async function loadSettings() {
 
 // Create agent based on selected provider
 function createAgent() {
-  const currentKey = aiProvider === 'gemini' ? geminiApiKey : claudeApiKey;
-  if (aiProvider === 'gemini') {
-    agent = new GeminiAgent(currentKey);
+  if (aiProvider === 'browser') {
+    agent = new BrowserAgent();
+  } else if (aiProvider === 'gemini') {
+    agent = new GeminiAgent(geminiApiKey);
   } else {
-    agent = new ClaudeAgent(currentKey);
+    agent = new ClaudeAgent(claudeApiKey);
   }
   if (backgroundPort) agent.setBackgroundPort(backgroundPort);
 }
 
 // Update API key help text based on provider
 function updateApiKeyHelp() {
-  if (aiProvider === 'gemini') {
+  if (aiProvider === 'browser') {
+    settingsTitle.textContent = 'Browser Settings';
+    apiKeyHelp.innerHTML = 'Uses built-in Chrome AI. Enable at <a href="chrome://flags/#prompt-api-for-gemini-nano" target="_blank">chrome://flags</a>';
+  } else if (aiProvider === 'gemini') {
     settingsTitle.textContent = 'Gemini Settings';
     apiKeyHelp.innerHTML = 'Get your API key from <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com</a>';
   } else {
@@ -118,6 +122,13 @@ function updateApiKeyHelp() {
 
 // Save API key
 async function saveSettings() {
+  if (aiProvider === 'browser') {
+    createAgent();
+    addSystemMessage('Settings saved (Browser)');
+    settingsPanel.classList.add('hidden');
+    return;
+  }
+
   const newKey = apiKeyInput.value.trim();
   if (newKey) {
     if (aiProvider === 'gemini') {
@@ -608,16 +619,22 @@ aiProviderSelect.addEventListener('change', async () => {
   aiProvider = aiProviderSelect.value;
   await chrome.storage.local.set({ aiProvider: aiProvider });
   updateApiKeyHelp();
-  // Update API key input to show the key for the new provider
-  const currentKey = aiProvider === 'gemini' ? geminiApiKey : claudeApiKey;
-  apiKeyInput.value = currentKey;
-  // Create agent if key exists, otherwise clear it
-  if (currentKey) {
+
+  if (aiProvider === 'browser') {
+    apiKeyInput.value = '';
     createAgent();
   } else {
-    agent = null;
+    const currentKey = aiProvider === 'gemini' ? geminiApiKey : claudeApiKey;
+    apiKeyInput.value = currentKey;
+    if (currentKey) {
+      createAgent();
+    } else {
+      agent = null;
+    }
   }
-  addSystemMessage(`Switched to ${aiProvider === 'gemini' ? 'Gemini' : 'Claude'}`);
+
+  const providerName = aiProvider === 'gemini' ? 'Gemini' : aiProvider === 'browser' ? 'Browser' : 'Claude';
+  addSystemMessage(`Switched to ${providerName}`);
 });
 
 // Initialize
