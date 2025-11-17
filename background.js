@@ -131,6 +131,63 @@ chrome.runtime.onConnect.addListener((port) => {
         });
       }
     }
+
+    if (message.type === 'CALL_BROWSER') {
+      // Call Prompt API from background
+      try {
+        if ( typeof LanguageModel === 'undefined' ) {
+          throw new Error( 'Built-in AI not available. Enable chrome://flags/#prompt-api-for-gemini-nano' );
+        }
+
+        const availability = await LanguageModel.availability();
+
+        if ( availability === 'unavailable' ) {
+          throw new Error( 'Built-in AI model unavailable. Check chrome://flags' );
+        }
+
+        if ( availability === 'downloading' ) {
+          throw new Error( 'Built-in AI model is downloading. Please wait and try again.' );
+        }
+
+        // Convert messages to Prompt API format
+        const promptMessages = message.messages.map(msg => ({
+          role: msg.role === 'assistant' ? 'assistant' : 'user',
+          content: msg.content
+        }));
+
+        // Create session with system prompt
+        const session = await LanguageModel.create( {
+          initialPrompts: [
+            { role: 'system', content: message.systemPrompt },
+            ...promptMessages
+          ]
+        } );
+
+        // Get the last user message
+        const lastMessage = promptMessages[ promptMessages.length - 1 ];
+
+        if ( !lastMessage || lastMessage.role !== 'user' ) {
+          throw new Error( 'No user message to send' );
+        }
+
+        // Send message and get response
+        const response = await session.prompt( lastMessage.content );
+
+        // Destroy session after use
+        session.destroy();
+
+        port.postMessage({
+          type: 'BROWSER_RESPONSE',
+          response
+        });
+
+      } catch (error) {
+        port.postMessage({
+          type: 'ERROR',
+          error: error.message
+        });
+      }
+    }
   });
 
   port.onDisconnect.addListener(() => {
